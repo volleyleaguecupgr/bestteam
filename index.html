@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Volleyball Team Control Panel (GitHub)</title>
     <style>
-        /* ... (Same CSS as previous version) ... */
+        /* ... (CSS remains the same) ... */
         * {
             margin: 0;
             padding: 0;
@@ -317,15 +317,15 @@
                 <button class="btn btn-github" onclick="loadPlayersFromGitHub()">
                     📥 Φόρτωση από GitHub
                 </button>
-                <button class="btn btn-github" onclick="addOrUpdatePlayer(true)">
-                    ⬆️ Αποθήκευση/Ανέβασμα στο GitHub
+                <button class="btn btn-github" onclick="savePlayersToGitHub()">
+                    ⬆️ Αποθήκευση Ομάδας στο GitHub (JSON Commit)
                 </button>
             </div>
         </div>
 
         <div class="form-section">
             <h2 id="formTitle">Προσθήκη Παίκτη</h2>
-            <form id="playerForm" onsubmit="event.preventDefault(); addOrUpdatePlayer(false)">
+            <form id="playerForm" onsubmit="event.preventDefault(); addOrUpdatePlayer()">
                 <div class="form-grid">
                     <div class="form-group">
                         <label for="playerName">Όνομα Παίκτη *</label>
@@ -355,10 +355,10 @@
                 </div>
                 <div class="action-buttons">
                     <button class="btn btn-primary" id="addBtn" type="submit">
-                        ➕ Προσθήκη Παίκτη
+                        ➕ Προσθήκη & Ανέβασμα Φωτο
                     </button>
                     <button class="btn btn-success" id="updateBtn" type="submit" style="display: none;">
-                        ✏️ Ενημέρωση Παίκτη
+                        ✏️ Ενημέρωση & Ανέβασμα Φωτο
                     </button>
                     <button class="btn btn-secondary" id="cancelBtn" onclick="cancelEdit()" type="button" style="display: none;">
                         ❌ Ακύρωση
@@ -373,7 +373,7 @@
         </div>
 
         <div class="display-section">
-            <h2>JSON Data Preview</h2>
+            <h2>JSON Data Preview (Local Changes)</h2>
             <div class="json-display" id="jsonDisplay"></div>
             <button class="btn btn-display" onclick="openDisplay()">
                 🚀 Άνοιγμα Display
@@ -384,7 +384,7 @@
     <script>
         let players = [];
         let editingIndex = -1;
-        let currentJsonSha = null; // Stores SHA hash of the JSON file for updates
+        let currentJsonSha = null;
         const GITHUB_API_URL = 'https://api.github.com/repos/';
 
         function getGitHubDetails() {
@@ -393,7 +393,7 @@
                 owner: document.getElementById('githubOwner').value.trim(),
                 repo: document.getElementById('githubRepo').value.trim(),
                 path: document.getElementById('githubFilePath').value.trim(),
-                photoFolder: document.getElementById('githubPhotoFolder').value.trim().replace(/^\/|\/$/g, '') + '/' // Ensure trailing slash
+                photoFolder: document.getElementById('githubPhotoFolder').value.trim().replace(/^\/|\/$/g, '') + '/'
             };
         }
         
@@ -405,44 +405,28 @@
         // --- GitHub API Functions (File Upload) ---
 
         async function uploadPhotoToGitHub(file, playerName, photoUrl) {
+            if (!getRequiredConfig()) {
+                alert('Παρακαλώ συμπληρώστε τα στοιχεία του GitHub (Token, Owner, Repository) πριν ανεβάσετε φωτογραφία.');
+                return null;
+            }
             const details = getGitHubDetails();
             const cleanName = playerName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
             const fileExtension = file.name.split('.').pop().toLowerCase();
             const fileName = `${cleanName}_${Date.now()}.${fileExtension}`;
             const photoPath = details.photoFolder + fileName;
             
-            // 1. Convert file to Base64
             const base64Content = await new Promise((resolve, reject) => {
                 const reader = new FileReader();
                 reader.readAsDataURL(file);
                 reader.onload = () => {
-                    // Remove the data URI prefix (e.g., 'data:image/png;base64,')
                     const base64data = reader.result.split(',')[1];
                     resolve(base64data);
                 };
                 reader.onerror = error => reject(error);
             });
             
-            // 2. Determine if the file exists (for SHA)
             let existingSha = null;
-            if (photoUrl) {
-                // If a photo URL exists, check if the file is the same one to avoid uploading twice
-                // For simplicity here, we assume if the user selected a new file, they want to replace it.
-                // We check if the existing URL points to a GitHub file to get its SHA if needed for replacement.
-                try {
-                    const existingFilePath = new URL(photoUrl).pathname.split(details.repo)[1].substring(1);
-                    const infoResponse = await fetch(`${GITHUB_API_URL}${details.owner}/${details.repo}/contents/${existingFilePath}`, {
-                        headers: { 'Authorization': `token ${details.token}` }
-                    });
-                    if (infoResponse.ok) {
-                        const info = await infoResponse.json();
-                        // If the photo name is different, we delete the old one, but for now, we just create a new one.
-                        // To prevent committing multiple files, we use a unique name.
-                    }
-                } catch(e) { /* ignore error if not a github URL */ }
-            }
-
-            // 3. Commit the file
+            
             const apiUrl = `${GITHUB_API_URL}${details.owner}/${details.repo}/contents/${photoPath}`;
             
             const payload = {
@@ -465,7 +449,7 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    // Return the raw content URL for the JSON data
+                    // Raw URL for image display
                     return result.content.download_url;
                 } else {
                     throw new Error(result.message || 'GitHub photo upload failed.');
@@ -486,7 +470,6 @@
             }
             const details = getGitHubDetails();
 
-            // 1. Get file info (for SHA and existence check)
             const apiUrl = `${GITHUB_API_URL}${details.owner}/${details.repo}/contents/${details.path}`;
             const rawUrl = `https://raw.githubusercontent.com/${details.owner}/${details.repo}/main/${details.path}`;
 
@@ -525,6 +508,7 @@
             updateJsonDisplay();
         }
 
+        // MODIFIED: This function is now ONLY called by the main save button.
         async function savePlayersToGitHub() {
             if (!getRequiredConfig()) return alert('Παρακαλώ συμπληρώστε όλα τα στοιχεία του GitHub.');
             
@@ -533,7 +517,7 @@
             const base64Content = btoa(unescape(encodeURIComponent(content)));
 
             const payload = {
-                message: `Update best_team.json: ${new Date().toLocaleString()}`,
+                message: `Final commit: Team updated with ${players.length} players.`,
                 content: base64Content,
                 sha: currentJsonSha
             };
@@ -553,11 +537,11 @@
 
                 if (response.ok) {
                     currentJsonSha = result.content.sha;
-                    alert(`Επιτυχής αποθήκευση JSON στο GitHub!`);
+                    alert(`✅ Οριστική αποθήκευση JSON στο GitHub ολοκληρώθηκε!`);
                     localStorage.setItem('bestTeamUpdate', Date.now()); 
                 } else {
                     console.error('GitHub JSON API Error:', result);
-                    alert(`Αποτυχία αποθήκευσης JSON. Σφάλμα: ${result.message || 'Άγνωστο'}. (Ελέγξτε την console)`);
+                    alert(`❌ Αποτυχία αποθήκευσης JSON. Σφάλμα: ${result.message || 'Άγνωστο'}. (Ελέγξτε την console)`);
                 }
             } catch (error) {
                 console.error('Network or other error during GitHub save:', error);
@@ -567,8 +551,8 @@
 
         // --- Core Player Management Functions ---
         
-        // isCommit: boolean, true if clicking the main commit button
-        async function addOrUpdatePlayer(isCommit) {
+        // MODIFIED: This function no longer calls savePlayersToGitHub() at the end.
+        async function addOrUpdatePlayer() {
             const fileInput = document.getElementById('playerPhotoFile');
             const photoFile = fileInput.files[0];
             const name = document.getElementById('playerName').value.trim();
@@ -576,25 +560,12 @@
             const team = document.getElementById('playerTeam').value.trim();
             const currentPhotoUrl = fileInput.dataset.currentUrl;
 
-            // If user clicks the main commit button, just save the JSON
-            if (isCommit) {
-                if (editingIndex !== -1) {
-                    // Prevent commits when a player is half-edited
-                    alert('Παρακαλώ ολοκληρώστε την επεξεργασία του παίκτη ή πατήστε Ακύρωση.');
-                    return;
-                }
-                await savePlayersToGitHub();
-                return;
-            }
-
-            // --- Add/Update Logic (when clicking Add/Update button) ---
-
             if (!name || !team) {
                 alert('Παρακαλώ συμπληρώστε όλα τα υποχρεωτικά πεδία!');
                 return;
             }
 
-            let newPhotoUrl = currentPhotoUrl; // Keep existing URL by default
+            let newPhotoUrl = currentPhotoUrl;
 
             // 1. Photo Upload Logic
             if (editingIndex === -1) {
@@ -605,16 +576,15 @@
             } else if (photoFile) {
                 // UPDATING: File is optional, if selected, upload it
                 if (!confirm(`Θέλετε να αντικαταστήσετε την παλιά φωτογραφία με το αρχείο "${photoFile.name}";`)) {
-                    fileInput.value = ''; // Clear file selection if user cancels
-                    newPhotoUrl = currentPhotoUrl; // Keep old URL
+                    fileInput.value = '';
+                    newPhotoUrl = currentPhotoUrl;
                 } else {
                     newPhotoUrl = await uploadPhotoToGitHub(photoFile, name, currentPhotoUrl);
                 }
             } 
             
-            // If the photo upload failed or was skipped for an update, ensure we have a URL
             if (!newPhotoUrl) {
-                return alert('Η ενημέρωση απέτυχε: Δεν υπάρχει έγκυρη διεύθυνση URL φωτογραφίας.');
+                return alert('Η ενέργεια απέτυχε: Δεν υπάρχει έγκυρη διεύθυνση URL φωτογραφίας.');
             }
 
 
@@ -629,7 +599,7 @@
                     photo: newPhotoUrl
                 };
                 players.push(player);
-                alert('Ο παίκτης προστέθηκε και η φωτογραφία ανέβηκε!');
+                alert('✅ Ο παίκτης προστέθηκε στην τοπική λίστα και η φωτογραφία ανέβηκε στο GitHub.');
             } else {
                 // Update Player
                 const player = players[editingIndex];
@@ -637,16 +607,15 @@
                 player.position = position;
                 player.team = team;
                 player.photo = newPhotoUrl;
-                alert('Ο παίκτης ενημερώθηκε!');
+                alert('✅ Ο παίκτης ενημερώθηκε στην τοπική λίστα.');
             }
 
-            // 3. Save JSON after local players array is updated
-            await savePlayersToGitHub();
+            // 3. Update local state ONLY
             renderPlayers();
+            updateJsonDisplay();
             clearForm();
             cancelEdit();
         }
-
 
         function renderPlayers() {
             const list = document.getElementById('playersList');
@@ -691,7 +660,6 @@
                 };
                 reader.readAsDataURL(file);
             } else {
-                // If a file is deselected, try to show the current URL image
                 const currentUrl = e.target.dataset.currentUrl;
                 if (currentUrl) {
                      preview.innerHTML = `<img src="${currentUrl}" alt="Current Photo">`;
@@ -713,9 +681,8 @@
             document.getElementById('playerPosition').value = player.position;
             document.getElementById('playerTeam').value = player.team;
             
-            // Store the current URL in the file input's data attribute
             fileInput.dataset.currentUrl = player.photo;
-            fileInput.value = ''; // Clear file input so user can choose new file or leave blank
+            fileInput.value = '';
 
             photoPreview.innerHTML = `<img src="${player.photo}" alt="Preview" onerror="this.src='https://via.placeholder.com/200?text=NO+IMG'">`;
             photoPreview.classList.remove('empty');
@@ -728,12 +695,13 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
+        // MODIFIED: This function no longer calls savePlayersToGitHub() at the end.
         async function deletePlayer(index) {
-            if (confirm('Είστε σίγουροι ότι θέλετε να διαγράψετε αυτόν τον παίκτη;')) {
+            if (confirm('Είστε σίγουροι ότι θέλετε να διαγράψετε αυτόν τον παίκτη από την τοπική λίστα;')) {
                 players.splice(index, 1);
                 renderPlayers();
                 updateJsonDisplay();
-                alert('Ο παίκτης διαγράφηκε! Πατήστε "Αποθήκευση/Ανέβασμα στο GitHub" για οριστική διαγραφή του JSON.');
+                alert('✅ Ο παίκτης διαγράφηκε από την τοπική λίστα! Πατήστε "Αποθήκευση Ομάδας στο GitHub" για οριστική αλλαγή.');
             }
         }
 
