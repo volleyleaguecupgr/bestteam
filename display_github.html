@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Volleyball Dream Team Display</title>
+  <title>Volleyball Dream Team Display (GitHub)</title>
   <style>
+    /* CSS from original file, adjusted for layout */
     * {margin: 0; padding: 0; box-sizing: border-box;}
     body {
       font-family: 'Arial', sans-serif;
@@ -18,8 +19,9 @@
       position: relative;
       width: 1920px;
       height: 1080px;
-      background-image: url('mvp_background.jpg');
-      background-size: auto;
+      /* Use the background image */
+      background-image: url('mvp_background.jpg'); 
+      background-size: 100% 100%; 
       background-position: center;
       display: flex;
       align-items: center;
@@ -31,25 +33,39 @@
       max-width: 1500px;
       position: relative;
       z-index: 5;
+      /* Adjusted to center content on the background graphic */
+      transform: translateY(100px); 
     }
 
     .players-grid {
       display: flex;
       flex-direction: column;
-      gap: 80px;
+      gap: 120px; /* Increased gap to match result_mvp.jpg layout */
+      align-items: center; 
     }
 
     .player-row {
       display: flex;
-      justify-content: space-around;
+      justify-content: center; 
       align-items: flex-start;
-      gap: 60px;
+      gap: 150px; /* Adjusted gap to match result_mvp.jpg layout */
     }
+
+    /* Row specific adjustments to match image alignment */
+    .player-row:nth-child(2) {
+        gap: 150px; 
+    }
+    .player-row:nth-child(3) {
+        gap: 0; 
+        margin-top: -30px; 
+    }
+
 
     .player-card {
       text-align: center;
       opacity: 0;
       transform: translateY(60px) scale(0.9);
+      width: 280px; 
     }
 
     /* Smooth staggered animation */
@@ -76,6 +92,7 @@
       object-fit: cover;
       border: 6px solid white;
       box-shadow: 0 15px 40px rgba(0,0,0,0.6);
+      box-sizing: border-box; 
     }
 
     .team-badge {
@@ -84,16 +101,20 @@
       right: -20px;
       width: 80px;
       height: 80px;
-      background: white;
+      background: none; 
       border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      font-weight: bold;
-      color: #1e3a8a;
-      box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+      box-shadow: none;
       padding: 5px;
+    }
+
+    .team-badge-img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        background: white; 
+        border-radius: 50%;
+        padding: 5px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.4);
     }
 
     .player-position {
@@ -158,63 +179,125 @@
 
   <div class="display-container" id="displayContainer">
     <div class="content-wrapper" id="contentWrapper">
-      <div class="no-data" id="noData">Φόρτωση δεδομένων...</div>
+      <div class="no-data" id="noData">Παρακαλώ εισάγετε τα στοιχεία του GitHub στο Control Panel...</div>
     </div>
   </div>
 
   <script>
     let players = [];
-
-    function loadPlayers() {
-      const stored = localStorage.getItem('volleyballTeam');
-      if (stored) {
-        players = JSON.parse(stored);
-        if (players.length > 0) {
-          renderDisplay();
-        } else {
-          document.getElementById('noData').textContent = 'Δεν υπάρχουν παίκτες.';
+    
+    // Configuration loaded from localStorage
+    let GITHUB_OWNER = '';
+    let GITHUB_REPO = '';
+    let GITHUB_FILE_PATH = 'best_team.json';
+    
+    function loadConfig() {
+        const config = localStorage.getItem('githubConfig');
+        if (config) {
+            const details = JSON.parse(config);
+            GITHUB_OWNER = details.owner;
+            GITHUB_REPO = details.repo;
+            GITHUB_FILE_PATH = details.path;
         }
-      } else {
-        document.getElementById('noData').textContent = 'Δεν βρέθηκαν δεδομένα.';
-      }
+    }
+
+
+    // Function to Load JSON from GitHub
+    async function loadPlayersFromGitHub() {
+        loadConfig();
+        const noDataElement = document.getElementById('noData');
+        
+        if (!GITHUB_OWNER || !GITHUB_REPO) {
+            noDataElement.textContent = 'Παρακαλώ εισάγετε τα στοιχεία του GitHub στο Control Panel.';
+            return;
+        }
+
+        noDataElement.textContent = 'Φόρτωση δεδομένων από GitHub...';
+        
+        // Construct the raw content URL
+        const rawUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/${GITHUB_FILE_PATH}`;
+
+        try {
+            // Fetch the raw JSON data
+            const response = await fetch(rawUrl);
+
+            if (response.ok) {
+                players = await response.json();
+                if (players.length > 0) {
+                    renderDisplay();
+                } else {
+                    noDataElement.style.display = 'block';
+                    noDataElement.textContent = 'Το αρχείο JSON είναι κενό.';
+                }
+            } else if (response.status === 404) {
+                 noDataElement.style.display = 'block';
+                 noDataElement.textContent = `Το αρχείο ${GITHUB_FILE_PATH} δεν βρέθηκε στο GitHub.`;
+            } else {
+                throw new Error(`Failed to fetch raw content. Status: ${response.status}`);
+            }
+        } catch (e) {
+            console.error('Error loading data from GitHub:', e);
+            noDataElement.style.display = 'block';
+            noDataElement.textContent = 'Σφάλμα φόρτωσης. Ελέγξτε την console.';
+        }
     }
 
     function renderDisplay() {
-      document.getElementById('noData').style.display = 'none';
-      const positions = {
-        'ΑΚΡΑΙΟΣ': [],
-        'ΚΕΝΤΡΙΚΟΣ': [],
-        'ΛΙΜΠΕΡΟ': [],
-        'ΔΙΑΓΩΝΙΟΣ': [],
-        'ΠΑΣΑΔΟΡΟΣ': []
-      };
+        document.getElementById('noData').style.display = 'none';
 
-      players.forEach(p => { if (positions[p.position]) positions[p.position].push(p); });
+        // 1. Group players by position
+        const positions = {
+            'ΑΚΡΑΙΟΣ': [],
+            'ΚΕΝΤΡΙΚΟΣ': [],
+            'ΛΙΜΠΕΡΟ': [],
+            'ΔΙΑΓΩΝΙΟΣ': [],
+            'ΠΑΣΑΔΟΡΟΣ': []
+        };
 
-      let html = '<div class="players-grid">';
-      html += '<div class="player-row">';
-      ['ΑΚΡΑΙΟΣ', 'ΚΕΝΤΡΙΚΟΣ', 'ΛΙΜΠΕΡΟ'].forEach(pos => { if (positions[pos][0]) html += createPlayerCard(positions[pos][0]); });
-      html += '</div><div class="player-row">';
-      if (positions['ΔΙΑΓΩΝΙΟΣ'][0]) html += createPlayerCard(positions['ΔΙΑΓΩΝΙΟΣ'][0]);
-      if (positions['ΑΚΡΑΙΟΣ'][1]) html += createPlayerCard(positions['ΑΚΡΑΙΟΣ'][1]);
-      if (positions['ΠΑΣΑΔΟΡΟΣ'][0]) html += createPlayerCard(positions['ΠΑΣΑΔΟΡΟΣ'][0]);
-      html += '</div>';
-      if (positions['ΚΕΝΤΡΙΚΟΣ'][1]) {
+        players.forEach(p => { 
+            if (positions[p.position]) {
+                positions[p.position].push(p); 
+            }
+        });
+
+        // 2. Custom Layout Logic to match result_mvp.jpg (7-Player lineup)
+        let html = '<div class="players-grid">';
+
+        // Row 1 (Top Row: ΑΚΡΑΙΟΣ, ΚΕΝΤΡΙΚΟΣ, ΛΙΜΠΕΡΟ) - 3 Players
         html += '<div class="player-row">';
-        html += createPlayerCard(positions['ΚΕΝΤΡΙΚΟΣ'][1]);
+        if (positions['ΑΚΡΑΙΟΣ'][0]) html += createPlayerCard(positions['ΑΚΡΑΙΟΣ'][0]);
+        if (positions['ΚΕΝΤΡΙΚΟΣ'][0]) html += createPlayerCard(positions['ΚΕΝΤΡΙΚΟΣ'][0]);
+        if (positions['ΛΙΜΠΕΡΟ'][0]) html += createPlayerCard(positions['ΛΙΜΠΕΡΟ'][0]);
         html += '</div>';
-      }
-      html += '</div>';
-      document.getElementById('contentWrapper').innerHTML = html;
-      animatePlayers();
+
+        // Row 2 (Middle Row: ΔΙΑΓΩΝΙΟΣ, ΑΚΡΑΙΟΣ, ΠΑΣΑΔΟΡΟΣ) - 3 Players
+        html += '<div class="player-row">';
+        if (positions['ΔΙΑΓΩΝΙΟΣ'][0]) html += createPlayerCard(positions['ΔΙΑΓΩΝΙΟΣ'][0]);
+        if (positions['ΑΚΡΑΙΟΣ'][1]) html += createPlayerCard(positions['ΑΚΡΑΙΟΣ'][1]); 
+        if (positions['ΠΑΣΑΔΟΡΟΣ'][0]) html += createPlayerCard(positions['ΠΑΣΑΔΟΡΟΣ'][0]);
+        html += '</div>';
+
+        // Row 3 (Bottom Row: ΚΕΝΤΡΙΚΟΣ) - 1 Player
+        html += '<div class="player-row">';
+        if (positions['ΚΕΝΤΡΙΚΟΣ'][1]) html += createPlayerCard(positions['ΚΕΝΤΡΙΚΟΣ'][1]);
+        html += '</div>';
+        
+        html += '</div>';
+        document.getElementById('contentWrapper').innerHTML = html;
+        animatePlayers();
     }
 
     function createPlayerCard(p) {
+      // Team logo is assumed to be in the repo and named after the team (lowercase, dashed)
+      const teamLogoUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/logos/${p.team.toLowerCase().replace(/\s+/g, '-')}.png`;
+      
       return `
         <div class="player-card">
           <div class="player-photo-wrapper">
-            <img src="${p.photo}" class="player-photo" alt="${p.name}">
-            <div class="team-badge">${p.team}</div>
+            <img src="${p.photo}" class="player-photo" alt="${p.name}" onerror="this.src='https://via.placeholder.com/220?text=NO+IMG'">
+            <div class="team-badge">
+                <img src="${teamLogoUrl}" class="team-badge-img" alt="${p.team}" onerror="this.src='https://via.placeholder.com/80/FFFFFF?text=${p.team.substring(0, 3)}'">
+            </div>
           </div>
           <div class="player-position">${p.position}</div>
           <div class="player-name">${p.name}</div>
@@ -230,14 +313,15 @@
     }
 
     function reloadDisplay() {
-      location.reload();
+      loadPlayersFromGitHub();
     }
 
+    // Monitor local storage for update signal from control panel (simulated server call)
     window.addEventListener('storage', e => {
-      if (e.key === 'volleyballTeam') reloadDisplay();
+      if (e.key === 'bestTeamUpdate') reloadDisplay();
     });
 
-    loadPlayers();
+    loadPlayersFromGitHub();
   </script>
 </body>
 </html>
